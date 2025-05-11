@@ -183,7 +183,6 @@ def main():
     This function is executed when the module is run directly and serves as an
     entry point for testing or standalone execution.
 
-    @Author: Md Rezwanul Haque
     """
     try:
         manager = VectorStoreManager()
