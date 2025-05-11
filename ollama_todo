@@ -1,0 +1,5 @@
+## llama model: multilingual large language models
+ollama pull llama3.2
+
+## Embedding model
+ollama pull mxbai-embed-large
