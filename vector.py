@@ -1,14 +1,13 @@
 """
+@Author: Md Rezwanul Haque
+
 Module for initializing and managing a Chroma vector store for restaurant reviews.
 
-This module loads restaurant reviews from a CSV file, generates embeddings using
-OllamaEmbeddings, and creates a Chroma vector store for efficient retrieval. It
-supports one-time document addition to avoid redundant processing and provides a
-configured retriever for querying relevant reviews.
-
-@Author: Md Rezwanul Haque
+    This module loads restaurant reviews from a CSV file, generates embeddings using
+    OllamaEmbeddings, and creates a Chroma vector store for efficient retrieval. It
+    supports one-time document addition to avoid redundant processing and provides a
+    configured retriever for querying relevant reviews.
 """
-
 import os
 import pandas as pd
 from langchain_ollama import OllamaEmbeddings
@@ -182,7 +181,6 @@ def main():
 
     This function is executed when the module is run directly and serves as an
     entry point for testing or standalone execution.
-
     """
     try:
         manager = VectorStoreManager()
