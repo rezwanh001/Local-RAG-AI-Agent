@@ -26,8 +26,8 @@ This app uses a language model (LLaMA 3.2 via LangChain) to answer questions abo
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/rezwanh001/LocalRAGAIAgent
-   cd LocalRAGAIAgent
+   git clone https://github.com/rezwanh001/Local-RAG-AI-Agent
+   cd Local-RAG-AI-Agent
    ```
 
 2. **Create a Virtual Environment**
