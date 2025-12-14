@@ -6,6 +6,8 @@ from langchain_ollama.llms import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 from vector import VectorStoreManager
 import time
+from tools import web_search
+from langchain.agents import create_react_agent, AgentExecutor
 
 # Initialize the model
 try:
@@ -20,18 +22,52 @@ manager = VectorStoreManager()
 manager.initialize_vector_store()
 retriever = manager.get_retriever()
 
-# Define the prompt template
+# Create a custom prompt
 template = """
-You are an expert in answering questions about a pizza restaurant.
+You are an expert on pizza restaurants. First, try to answer the question using the provided reviews. If the reviews don't contain the answer, you may use the available tools.
+
+Answer the following questions as best you can. You have access to the following tools:
+
+{tools}
+
+Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question
+
+Begin!
+
+Here is the chat history: {chat_history}
 
 Here are some relevant reviews: {reviews}
 
-Here is the question to answer: {question}
+Question: {input}
+Thought:{agent_scratchpad}
 """
 prompt = ChatPromptTemplate.from_template(template)
-chain = prompt | model
 
-def process_question(question, max_reviews=5):
+# Create the agent
+tools = [web_search]
+agent = create_react_agent(
+    llm=model,
+    tools=tools,
+    prompt=prompt,
+)
+
+# Create an agent executor
+agent_executor = AgentExecutor(
+    agent=agent,
+    tools=tools,
+    verbose=True
+)
+
+def process_question(question, history, max_reviews=5):
     """Process a user question and return the answer with relevant reviews."""
     start_time = time.time()
     
@@ -39,16 +75,20 @@ def process_question(question, max_reviews=5):
         # Retrieve relevant reviews
         reviews = retriever.invoke(question)
         if not reviews:
-            return "No relevant reviews found.", [], 0
+            reviews = []
         
         # Limit the number of reviews to avoid overwhelming the model
         reviews = reviews[:max_reviews]
         
-        # Invoke the chain to get the answer
-        result = chain.invoke({"reviews": reviews, "question": question})
+        # Invoke the agent to get the answer
+        result = agent_executor.invoke({
+            "input": question,
+            "chat_history": history,
+            "reviews": reviews
+        })
         
         processing_time = time.time() - start_time
-        return result, reviews, processing_time
+        return result["output"], reviews, processing_time
     except Exception as e:
         return f"Error processing question: {str(e)}", [], 0
 
@@ -96,31 +136,39 @@ def main():
         placeholder="E.g., What is the best pizza place in town?"
     )
     
+    # Initialize chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
     # Process button
     if st.button("Get Answer"):
         if not user_question.strip():
             st.warning("Please enter a question.")
         else:
             with st.spinner("Processing your question..."):
-                answer, reviews, processing_time = process_question(user_question, max_reviews)
+                # Append user question to history
+                st.session_state.chat_history.append({"role": "user", "content": user_question})
                 
-                # Display results
-                col1, col2 = st.columns([2, 1])
+                answer, reviews, processing_time = process_question(user_question, st.session_state.chat_history, max_reviews)
                 
-                with col1:
-                    st.subheader("Answer")
-                    st.markdown(answer)
-                
-                with col2:
-                    st.subheader("Relevant Reviews")
-                    if reviews:
-                        for i, review in enumerate(reviews, 1):
-                            with st.expander(f"Review {i}"):
-                                st.write(review)
-                    else:
-                        st.write("No reviews available.")
-                
-                st.success(f"Question processed in {processing_time:.2f} seconds")
+                # Append assistant response to history
+                st.session_state.chat_history.append({"role": "assistant", "content": answer, "reviews": reviews, "processing_time": processing_time})
+
+    # Display chat history
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            if message["role"] == "user":
+                st.markdown(message["content"])
+            else:
+                st.markdown(message["content"])
+                if "reviews" in message and message["reviews"]:
+                    with st.expander("Relevant Reviews"):
+                        for i, review in enumerate(message["reviews"], 1):
+                            st.write(f"**Review {i}:** {review.page_content}")
+                            st.write(f"**Rating:** {review.metadata['rating']}")
+                            st.write(f"**Date:** {review.metadata['date']}")
+                if "processing_time" in message:
+                    st.success(f"Question processed in {message['processing_time']:.2f} seconds")
     
     # Information section
     with st.expander("About Pizza Restaurant Q&A"):
@@ -137,6 +185,32 @@ def main():
         
         Note: Ensure the `retriever` module is properly configured to fetch reviews.
         """)
+
+    # Add a new review
+    with st.sidebar:
+        st.header("Add a New Review")
+        with st.form("new_review_form"):
+            review_title = st.text_input("Review Title")
+            review_text = st.text_area("Review Text")
+            review_rating = st.slider("Rating", 1, 5, 5)
+            review_date = st.date_input("Date")
+
+            submitted = st.form_submit_button("Submit Review")
+            if submitted:
+                if review_title and review_text:
+                    new_review = {
+                        "Title": review_title,
+                        "Review": review_text,
+                        "Rating": review_rating,
+                        "Date": review_date.strftime("%Y-%m-%d")
+                    }
+                    try:
+                        manager.add_reviews([new_review])
+                        st.success("New review added successfully!")
+                    except Exception as e:
+                        st.error(f"Error adding review: {str(e)}")
+                else:
+                    st.warning("Please fill out all fields.")
 
 if __name__ == "__main__":
     main()

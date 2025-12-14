@@ -79,12 +79,13 @@ class VectorStoreManager:
             logger.error(f"Error loading CSV: {str(e)}")
             raise
 
-    def create_documents(self, df: pd.DataFrame) -> Tuple[List[Document], List[str]]:
+    def create_documents(self, df: pd.DataFrame, start_index: int = 0) -> Tuple[List[Document], List[str]]:
         """
         Create LangChain Document objects from the DataFrame.
 
         Args:
             df (pd.DataFrame): DataFrame containing review data.
+            start_index (int): The starting index for generating document IDs.
 
         Returns:
             Tuple[List[Document], List[str]]: List of Document objects and their IDs.
@@ -100,13 +101,13 @@ class VectorStoreManager:
                     logger.warning(f"Skipping row {i}: Missing required columns")
                     continue
                 
+                doc_id = str(start_index + i)
                 document = Document(
                     page_content=f"{row['Title']} {row['Review']}",
-                    metadata={"rating": row["Rating"], "date": row["Date"]},
-                    id=str(i)
+                    metadata={"rating": row["Rating"], "date": row["Date"]}
                 )
                 documents.append(document)
-                ids.append(str(i))
+                ids.append(doc_id)
             except Exception as e:
                 logger.warning(f"Error processing row {i}: {str(e)}")
                 continue
@@ -174,6 +175,33 @@ class VectorStoreManager:
         if self.retriever is None:
             raise ValueError("Retriever not initialized. Call initialize_vector_store first.")
         return self.retriever
+
+    def add_reviews(self, new_reviews: List[dict]):
+        """
+        Add new reviews to the vector store.
+
+        Args:
+            new_reviews (List[dict]): A list of new reviews to add.
+        """
+        try:
+            # Get the highest existing ID to determine the starting index for new reviews
+            existing_ids = self.vector_store.get()["ids"]
+            if existing_ids:
+                start_index = max(map(int, existing_ids)) + 1
+            else:
+                start_index = 0
+
+            df = pd.DataFrame(new_reviews)
+            documents, ids = self.create_documents(df, start_index=start_index)
+
+            if documents:
+                self.vector_store.add_documents(documents=documents, ids=ids)
+                logger.info(f"Added {len(documents)} new reviews to the vector store.")
+            else:
+                logger.info("No new reviews to add.")
+        except Exception as e:
+            logger.error(f"Error adding new reviews: {str(e)}")
+            raise
 
 def main():
     """
