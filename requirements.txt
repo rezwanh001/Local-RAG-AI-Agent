@@ -1,0 +1,8 @@
+streamlit
+langchain
+langchain-core
+langchain-ollama
+langchain-chroma
+pandas
+duckduckgo-search
+langchain-community
